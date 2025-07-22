@@ -122,7 +122,7 @@ bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) 
     try {
         await bot.sendMessage(
             chatId,
-            `${actualRecipientUsername} - 💰You've been tipped ${formatCurrency(amount, currency)}! Please DM @chdputip_bot and send "/claimtip" to claim your tip.\n\nTʜᴀɴᴋ ʏᴏᴜ ғᴏʀ ᴄᴏɴᴛʀɪʙᴜᴛɪɴɢ ᴛᴏ (TCCP) Tᴀʀᴀxᴀ Cʜᴀᴅ Cᴜʟᴛᴜʀᴇ Pʀᴏᴅᴜᴄᴛɪᴏɴ
+            `${actualRecipientUsername} - 💰You've been tipped ${formatCurrency(amount, currency)}!\n Please DM @chdputip_bot and send "/claimtip" to claim your tip.\n\nThank you for contributing to the TCCP\nTᴀʀᴀxᴀ Cʜᴀᴅ Cᴜʟᴛᴜʀᴇ Pʀᴏᴅᴜᴄᴛɪᴏɴ
 `
         );
         console.log(`Tip request for ${actualRecipientUsername} (${amount} ${currency.toUpperCase()}) initiated. Group notified.`);
@@ -210,7 +210,7 @@ https://x.com/ChadPuOfficial `);
         
         // Always include the burn address option, regardless of currency
         replyMessage += `Please reply to this message with a valid Taraxa EVM address (starting with \`0x...\`) to receive your tip.\n\n` +
-                        `*🔥If you'd like to burn your , copy and send this:*\n\`${CHDPU_BURN_ADDRESS}\`\n\n` +
+                        `*🔥If you'd like to burn your tip, copy and send this:*\n\`${CHDPU_BURN_ADDRESS}\`\n\n` +
                         `PU TO THE MOON 🗿🟢`; 
 
         await bot.sendMessage(
