@@ -1,20 +1,69 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
+const express = require('express'); // Import express
 
 // --- Configuration from Environment Variables ---
-// IMPORTANT: These MUST be set in your Codespaces Secrets!
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_TELEGRAM_ID = parseInt(process.env.ADMIN_TELEGRAM_ID, 10); // Your Telegram User ID
+const ADMIN_TELEGRAM_ID = parseInt(process.env.ADMIN_TELEGRAM_ID, 10);
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; // Use Service Role Key for bot backend
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// --- Initialize Bot and Supabase Client ---
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+// Vercel provides the PORT environment variable
+const PORT = process.env.PORT || 3000;
+// You'll get this URL from Vercel after your first deployment.
+// It will look something like https://your-project-name.vercel.app
+const VERCEL_URL = process.env.VERCEL_URL; // Vercel automatically sets this
+
+// --- Initialize Bot, Supabase Client, and Express App ---
+// IMPORTANT: Remove { polling: true }
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN);
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const app = express(); // Initialize Express app
+app.use(express.json()); // Middleware to parse JSON request bodies
 
 console.log('Bot starting...');
 
-// --- Helper function for currency display ---
+// --- Webhook Endpoint ---
+// This is the URL path Telegram will send updates to
+const WEBHOOK_PATH = `/webhook/${TELEGRAM_BOT_TOKEN}`; // Use token for unique path
+const WEBHOOK_URL = `${VERCEL_URL}${WEBHOOK_PATH}`;
+
+// Set the webhook with Telegram
+// This function needs to run only once after deployment or if the URL changes
+async function setWebhook() {
+    try {
+        await bot.setWebHook(WEBHOOK_URL);
+        console.log(`Webhook set to: ${WEBHOOK_URL}`);
+    } catch (error) {
+        console.error('Error setting webhook:', error.message);
+        // Exit process or handle error if webhook can't be set
+        // For Vercel, this is usually handled correctly during deployment startup
+    }
+}
+
+// Listen for incoming updates from Telegram
+app.post(WEBHOOK_PATH, (req, res) => {
+    bot.processUpdate(req.body); // Process the update
+    res.sendStatus(200); // Respond quickly to Telegram
+});
+
+// Basic endpoint to confirm the server is running (optional)
+app.get('/', (req, res) => {
+    res.send('Telegram bot is running.');
+});
+
+// Start the Express server
+app.listen(PORT, async () => {
+    console.log(`Express server listening on port ${PORT}`);
+    if (VERCEL_URL) { // Only set webhook if Vercel URL is available (i.e., not local dev)
+        await setWebhook();
+    } else {
+        console.warn('VERCEL_URL not found, webhook will not be set. Running in local development mode.');
+    }
+});
+
+
+// --- Helper function for currency display (UNCHANGED) ---
 function formatCurrency(amount, currency) {
     const safeCurrency = (currency && typeof currency === 'string' && currency.trim() !== '') ? currency.toLowerCase() : 'unknown';
     const symbol = safeCurrency === 'tara' ? '🟢' : '🗿🟢';
@@ -22,7 +71,7 @@ function formatCurrency(amount, currency) {
     return `${amount} ${displayCurrency} ${symbol}`;
 }
 
-// --- Bot Commands ---
+// --- Bot Commands (UNCHANGED from previous version, copy all the handlers) ---
 
 // /start command
 bot.onText(/\/start/, (msg) => {
@@ -48,7 +97,7 @@ Commands:
     bot.sendMessage(chatId, helpText);
 });
 
-// /tip command (Admin Only)
+// /tip command (Admin Only) - Make sure to include group_chat_id in insert!
 bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) => {
     const chatId = msg.chat.id;
     const adminId = msg.from.id;
@@ -99,7 +148,8 @@ bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) 
                     recipient_tg_id: recipientTgId,
                     amount: amount,
                     currency: currency,
-                    status: 'awaiting_claim'
+                    status: 'awaiting_claim',
+                    group_chat_id: chatId // <--- ADDED THIS LINE FOR GROUP NOTIFICATION
                 }
             ])
             .select();
@@ -304,7 +354,7 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
         // Fetch tip details to get recipient and currency for group notification
         const { data: tip, error: fetchError } = await supabase
             .from('tips')
-            .select('recipient_username, recipient_tg_id, amount, currency, admin_tg_id')
+            .select('recipient_username, recipient_tg_id, amount, currency, admin_tg_id, group_chat_id') // <--- Make sure group_chat_id is selected
             .eq('id', tipId)
             .single();
 
@@ -342,14 +392,27 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
                 console.log(`Notified recipient ${recipientDisplay} directly about fulfillment.`);
             } catch (dmError) {
                 console.warn(`Could not DM recipient ${recipientDisplay} (${tip.recipient_tg_id}) about fulfillment. Error: ${dmError.message}.`);
-                // Fallback: Notify the group where the tip was initiated (if you store chat ID)
-                // (This bot currently doesn't store the initial group chat ID, so this would require an extra column 'group_chat_id' in 'tips' table)
-                // For now, if DM fails, it just logs it.
+                // If DM fails, try group if possible
+                if (tip.group_chat_id) {
+                    try {
+                        await bot.sendMessage(tip.group_chat_id, fulfillmentMessage, { parse_mode: 'Markdown' });
+                        console.log(`Notified group ${tip.group_chat_id} about fulfillment after DM failure.`);
+                    } catch (groupError) {
+                        console.error(`Failed to notify original group ${tip.group_chat_id}:`, groupError.message);
+                    }
+                } else {
+                     console.warn(`No group chat ID to fallback for tip ${tipId}.`);
+                }
+            }
+        } else if (tip.group_chat_id) { // If recipient_tg_id was not captured, but group_chat_id is
+            try {
+                await bot.sendMessage(tip.group_chat_id, fulfillmentMessage, { parse_mode: 'Markdown' });
+                console.log(`Notified original group ${tip.group_chat_id} about fulfillment.`);
+            } catch (groupError) {
+                console.error(`Failed to notify original group ${tip.group_chat_id}:`, groupError.message);
             }
         } else {
-            // If no recipient_tg_id, then perhaps the original group where /tip was called?
-            // This would require storing msg.chat.id from the /tip command in the 'tips' table.
-            console.warn(`No recipient TG ID for tip ${tipId}. Cannot directly notify user about fulfillment.`);
+            console.warn(`No recipient TG ID or group chat ID for tip ${tipId}. Cannot notify about fulfillment.`);
         }
 
     } catch (error) {
@@ -360,6 +423,8 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
 
 
 // Log any errors from the polling process
-bot.on('polling_error', (err) => console.error('Polling Error:', err.message));
+// This particular error handler might become less relevant for webhook setup
+// as errors would be more about HTTP request handling rather than polling failures.
+bot.on('polling_error', (err) => console.error('Polling Error (should not occur with webhooks):', err.message));
 
 console.log('Bot is running and listening for commands...');
