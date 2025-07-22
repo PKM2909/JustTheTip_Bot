@@ -204,7 +204,7 @@ bot.onText(/\/claimtip/i, async (msg) => {
         
         // Always include the burn address option, regardless of currency
         replyMessage += `Please reply to this message with a valid Taraxa EVM address (starting with \`0x...\`) to receive your tip.\n\n` +
-                        `*If you'd like to send it to the burn address, copy and send this:*\n\`${CHDPU_BURN_ADDRESS}\`\n\n` +
+                        `*🔥If you'd like to send it to the burn address, copy and send this:*\n\`${CHDPU_BURN_ADDRESS}\`\n\n` +
                         `PU TO THE MOON 🗿🟢`; 
 
         await bot.sendMessage(
@@ -271,7 +271,7 @@ bot.on('message', async (msg) => {
                     if (stateClearError) throw stateClearError;
                     
                     console.log(`Address received from ${userId}: ${potentialAddress}.`);
-                    await bot.sendMessage(msg.chat.id, 'Thank you! Your address has been saved. The Chadmin will fulfill your tip shortly. Keep up the good work - PU TO THE MOON');
+                    await bot.sendMessage(msg.chat.id, 'Thank you! Your address has been received. The Chadmin will fulfill your request shortly. Keep up the good work - $chdpu to $1, $tara $10');
                     
                     // --- ADMIN NOTIFICATION (generic, no burn distinction) ---
                     const adminNotificationMessage = `
