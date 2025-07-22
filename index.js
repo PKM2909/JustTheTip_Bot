@@ -122,7 +122,9 @@ bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) 
     try {
         await bot.sendMessage(
             chatId,
-            `${actualRecipientUsername} - 💰You've been tipped ${formatCurrency(amount, currency)}! Please DM @chdputip_bot and send "/claimtip" to claim your tip.\n\nThank you for contributing to (TCCP) Taraxa Chad Culture Production`
+            `${actualRecipientUsername} - 💰You've been tipped ${formatCurrency(amount, currency)}! 
+            Please DM @chdputip_bot and send "/claimtip" to claim your tip.\n\nTʜᴀɴᴋ ʏᴏᴜ ғᴏʀ ᴄᴏɴᴛʀɪʙᴜᴛɪɴɢ ᴛᴏ (TCCP) Tᴀʀᴀxᴀ Cʜᴀᴅ Cᴜʟᴛᴜʀᴇ Pʀᴏᴅᴜᴄᴛɪᴏɴ
+`
         );
         console.log(`Tip request for ${actualRecipientUsername} (${amount} ${currency.toUpperCase()}) initiated. Group notified.`);
     } catch (error) {
@@ -155,7 +157,12 @@ bot.onText(/\/claimtip/i, async (msg) => {
 
         if (!pendingTips || pendingTips.length === 0) {
             const userNameDisplay = msg.from.first_name || 'there';
-            bot.sendMessage(chatId, `Sorry ${userNameDisplay} - you've got no tips to claim yet. Be an engaged community member in future to get tips! Participate in social media raids, make memes, be active in the TG, make your own unique $chdpu posts on X. All of these could lead to more than just the tip ;) nfa`);
+            bot.sendMessage(chatId, `Sorry ${userNameDisplay} - you've got no tips to claim YET. 
+                
+                Be an engaged community member in future to get tips! 
+                
+                Participate in X media raids, make memes, be active in the TG, make your own unique $chdpu posts on X. All of these could lead to more than just the tip ;)
+                https://x.com/ChadPuOfficial `);
             return;
         }
 
@@ -204,8 +211,8 @@ bot.onText(/\/claimtip/i, async (msg) => {
         
         // Always include the burn address option, regardless of currency
         replyMessage += `Please reply to this message with a valid Taraxa EVM address (starting with \`0x...\`) to receive your tip.\n\n` +
-                        `*🔥If you'd like to send it to the burn address, copy and send this:*\n\`${CHDPU_BURN_ADDRESS}\`\n\n` +
-                        `PU TO THE MOON 🗿🟢`; 
+                        `*🔥If you'd like to burn your tip, copy and send this:*\n\`${CHDPU_BURN_ADDRESS}\`\n\n` +
+                        `Pump the Pu 🗿🟢`; 
 
         await bot.sendMessage(
             chatId,
@@ -271,7 +278,10 @@ bot.on('message', async (msg) => {
                     if (stateClearError) throw stateClearError;
                     
                     console.log(`Address received from ${userId}: ${potentialAddress}.`);
-                    await bot.sendMessage(msg.chat.id, 'Thank you! Your address has been received. The Chadmin will fulfill your request shortly. Keep up the good work - $chdpu to $1, $tara $10');
+                    await bot.sendMessage(msg.chat.id, 'Thank you! Your address has been received. The Chadmin will fulfill your request shortly. 
+                        Keep up the good work - 
+                        
+                        $chdpu to $1, $tara $10');
                     
                     // --- ADMIN NOTIFICATION (generic, no burn distinction) ---
                     const adminNotificationMessage = `
