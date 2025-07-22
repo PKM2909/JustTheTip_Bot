@@ -7,8 +7,10 @@ const ADMIN_TELEGRAM_ID = parseInt(process.env.ADMIN_TELEGRAM_ID, 10);
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// Define the specific CHDPU burn address (now purely for user information)
+const CHDPU_BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD';
+
 // --- Initialize Bot and Supabase Client ---
-// IMPORTANT: Use { polling: true } for local/VM-like operation
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -43,12 +45,12 @@ I am a specialized bot for admin-only CHDPU/TARA tipping.
 Commands:
 /tip @username <amount> <chdpu|tara> - (Admin Only) Initiate a tip to a user in a group.
 /claimtip - (User in DM) Claim a pending tip.
-/done <tip_id> <tx_hash> - (Admin Only, in DM) Mark a tip as fulfilled and notify the group.
+/done <tip_id> <tx_hash> - (Admin Only, in DM) Mark a tip as fulfilled and notify the recipient.
     `;
     bot.sendMessage(chatId, helpText);
 });
 
-// /tip command (Admin Only) - group_chat_id is NOT stored in DB in this version
+// /tip command (Admin Only)
 bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) => {
     const chatId = msg.chat.id;
     const adminId = msg.from.id;
@@ -75,7 +77,6 @@ bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) 
     const actualRecipientUsername = recipientUsername.startsWith('@') ? recipientUsername : `@${recipientUsername}`;
 
     // 2. Store pending tip in Supabase
-    let newTip;
     try {
         let recipientTgId = null;
         if (msg.entities) {
@@ -100,7 +101,7 @@ bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) 
                     amount: amount,
                     currency: currency,
                     status: 'awaiting_claim'
-                    // group_chat_id is NOT included here, addressing schema error
+                    // is_burned flag removed
                 }
             ])
             .select();
@@ -108,7 +109,7 @@ bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) 
         if (error) throw error;
         if (!data || data.length === 0) throw new Error('No data returned after insert.');
 
-        newTip = data[0];
+        const newTip = data[0];
         console.log('New tip created:', newTip);
 
     } catch (error) {
@@ -199,10 +200,17 @@ bot.onText(/\/claimtip/i, async (msg) => {
         if (stateError) throw stateError;
         console.log(`User state set for ${userId} to awaiting_address_for_tip for tip ${tipToClaim.id}`);
 
-        // Ask for the address, including currency
+        let replyMessage = `Hey chad, you're claiming ${formatCurrency(tipToClaim.amount, tipToClaim.currency)}. `;
+        
+        // Always include the burn address option, regardless of currency
+        replyMessage += `Please reply to this message with a valid Taraxa EVM address (starting with \`0x...\`) to receive your tip.\n\n` +
+                        `*If you'd like to send it to the burn address, copy and send this:*\n\`${CHDPU_BURN_ADDRESS}\`\n\n` +
+                        `PU TO THE MOON 🗿🟢`; 
+
         await bot.sendMessage(
             chatId,
-            `Hey chad, you're claiming ${formatCurrency(tipToClaim.amount, tipToClaim.currency)}. Please reply to this message with a valid Taraxa EVM address (starting with \`0x...\`) to receive your tip.`
+            replyMessage,
+            { parse_mode: 'Markdown' }
         );
 
     } catch (error) {
@@ -229,24 +237,26 @@ bot.on('message', async (msg) => {
 
             if (userState && userState.state === 'awaiting_address_for_tip') {
                 const potentialAddress = msg.text.trim();
-                // Basic address validation
-                if (/^0x[a-fA-F0-9]{40}$/.test(potentialAddress)) {
-                    // Fetch the tip details to get amount and currency (re-fetch for safety/completeness)
-                    const { data: tipDetails, error: fetchTipError } = await supabase
-                        .from('tips')
-                        .select('id, recipient_username, recipient_tg_id, amount, currency, admin_tg_id')
-                        .eq('id', userState.context_id)
-                        .single();
-                    
-                    if (fetchTipError) throw fetchTipError;
-                    if (!tipDetails) throw new Error('Tip details not found for context_id');
+                
+                // Fetch tip details
+                const { data: tipDetails, error: fetchTipError } = await supabase
+                    .from('tips')
+                    .select('id, recipient_username, recipient_tg_id, amount, currency, admin_tg_id') // is_burned removed
+                    .eq('id', userState.context_id)
+                    .single();
+                
+                if (fetchTipError) throw fetchTipError;
+                if (!tipDetails) throw new Error('Tip details not found for context_id');
 
+                // Validate as a general EVM address
+                if (/^0x[a-fA-F0-9]{40}$/.test(potentialAddress)) {
                     // Update the tip with the address and new status
                     const { error: tipUpdateError } = await supabase
                         .from('tips')
                         .update({ 
                             recipient_address: potentialAddress,
-                            status: 'ready_for_admin_fulfillment' // This is the status that triggers your manual fulfillment
+                            status: 'ready_for_admin_fulfillment'
+                            // is_burned flag update removed
                         })
                         .eq('id', userState.context_id);
 
@@ -260,10 +270,10 @@ bot.on('message', async (msg) => {
 
                     if (stateClearError) throw stateClearError;
                     
-                    console.log(`Address received from ${userId}: ${potentialAddress}`);
+                    console.log(`Address received from ${userId}: ${potentialAddress}.`);
                     await bot.sendMessage(msg.chat.id, 'Thank you! Your address has been saved. The Chadmin will fulfill your tip shortly. Keep up the good work - PU TO THE MOON');
                     
-                    // --- ADMIN NOTIFICATION ---
+                    // --- ADMIN NOTIFICATION (generic, no burn distinction) ---
                     const adminNotificationMessage = `
                         💰 **NEW TIP READY FOR MANUAL FULFILLMENT!** 💰
 
@@ -278,6 +288,7 @@ bot.on('message', async (msg) => {
                     console.log(`Admin notified for tip ${tipDetails.id} with all details.`);
 
                 } else {
+                    // Invalid address format
                     await bot.sendMessage(msg.chat.id, 'That doesn\'t look like a valid Taraxa EVM address. Please try again. It should start with `0x` and be 42 characters long.');
                 }
             }
@@ -288,7 +299,7 @@ bot.on('message', async (msg) => {
     }
 });
 
-// --- New: /done Command (Admin Only, for confirming fulfillment) ---
+// --- /done Command (Admin Only, for confirming fulfillment) ---
 bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match) => {
     const chatId = msg.chat.id;
     const adminId = msg.from.id;
@@ -302,12 +313,10 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
     const txHash = match[2] || null; // Optional transaction hash
 
     try {
-        // Fetch tip details to get recipient and currency for group notification
-        // Note: group_chat_id is no longer stored, so direct group notification via this means isn't possible here.
-        // It relies on recipient_tg_id for direct DM or will fall back if no recipient_tg_id
+        // Fetch tip details
         const { data: tip, error: fetchError } = await supabase
             .from('tips')
-            .select('recipient_username, recipient_tg_id, amount, currency, admin_tg_id') // Removed group_chat_id selection
+            .select('recipient_username, recipient_tg_id, amount, currency, recipient_address') // is_burned removed
             .eq('id', tipId)
             .single();
 
@@ -328,16 +337,22 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
         bot.sendMessage(chatId, `Tip \`${tipId}\` marked as fulfilled.`);
         console.log(`Tip ${tipId} marked as fulfilled by admin. Tx Hash: ${txHash || 'N/A'}`);
 
-        // Notify the recipient that the tip has been fulfilled
+        // Notify the recipient (generic fulfillment message)
         let recipientDisplay = tip.recipient_username || `user with ID ${tip.recipient_tg_id}`;
         let fulfillmentMessage = `
-            🎉 Your tip for ${formatCurrency(tip.amount, tip.currency)} has been sent! Thank you for contributing to (TCCP) Taraxa Chad Culture Production! 🗿🟢
+            🎉 Your tip for ${formatCurrency(tip.amount, tip.currency)} has been sent! 🎉
             Recipient: ${recipientDisplay}
         `;
+        // Optionally, check if the recipient_address for this tip was the burn address,
+        // and add a note. This is a *visual* distinction, not based on a 'burn' flag.
+        if (tip.recipient_address && tip.recipient_address.toLowerCase() === CHDPU_BURN_ADDRESS.toLowerCase()) {
+             fulfillmentMessage += `\n(Note: This tip was sent to the burn address \`${CHDPU_BURN_ADDRESS}\` as per your request.)`;
+        }
+
         if (txHash) {
             fulfillmentMessage += `\nTransaction: \`${txHash}\``;
         }
-
+        
         // Try to notify the user directly if tg_id is available
         if (tip.recipient_tg_id) {
             try {
