@@ -121,7 +121,7 @@ bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) 
     try {
         await bot.sendMessage(
             chatId,
-            `${actualRecipientUsername} - You've been tipped ${formatCurrency(amount, currency)}! 🎉 Please DM me (click my name and send /claimtip) to claim your tip.\n\nThank you for contributing to (TCCP) Taraxa Chad Culture Production!`
+            `${actualRecipientUsername} - 💰You've been tipped ${formatCurrency(amount, currency)}! Please DM @chdputip_bot and send "/claimtip" to claim your tip.\n\nThank you for contributing to (TCCP) Taraxa Chad Culture Production`
         );
         console.log(`Tip request for ${actualRecipientUsername} (${amount} ${currency.toUpperCase()}) initiated. Group notified.`);
     } catch (error) {
@@ -137,7 +137,7 @@ bot.onText(/\/claimtip/i, async (msg) => {
     const chatId = msg.chat.id;
 
     if (msg.chat.type !== 'private') {
-        bot.sendMessage(chatId, 'Please use the /claimtip command in a private chat with me, not in a group.');
+        bot.sendMessage(chatId, 'no no, almost, please use the /claimtip command in a private chat with me, not in a group.');
         return;
     }
 
@@ -154,7 +154,7 @@ bot.onText(/\/claimtip/i, async (msg) => {
 
         if (!pendingTips || pendingTips.length === 0) {
             const userNameDisplay = msg.from.first_name || 'there';
-            bot.sendMessage(chatId, `Sorry ${userNameDisplay} - you've got no tips to claim yet. Be an engaged community member in future to get admin tips!`);
+            bot.sendMessage(chatId, `Sorry ${userNameDisplay} - you've got no tips to claim yet. Be an engaged community member in future to get tips! Participate in social media raids, make memes, be active in the TG, make your own unique $chdpu posts on X. All of these could lead to more than just the tip ;) nfa`);
             return;
         }
 
@@ -202,7 +202,7 @@ bot.onText(/\/claimtip/i, async (msg) => {
         // Ask for the address, including currency
         await bot.sendMessage(
             chatId,
-            `Okay, you're claiming ${formatCurrency(tipToClaim.amount, tipToClaim.currency)}. Please reply to this message with a valid Taraxa EVM address (starting with \`0x...\`) to receive your tip.`
+            `Hey chad, you're claiming ${formatCurrency(tipToClaim.amount, tipToClaim.currency)}. Please reply to this message with a valid Taraxa EVM address (starting with \`0x...\`) to receive your tip.`
         );
 
     } catch (error) {
@@ -261,7 +261,7 @@ bot.on('message', async (msg) => {
                     if (stateClearError) throw stateClearError;
                     
                     console.log(`Address received from ${userId}: ${potentialAddress}`);
-                    await bot.sendMessage(msg.chat.id, 'Thank you! Your address has been saved. The admin will fulfill your tip shortly.');
+                    await bot.sendMessage(msg.chat.id, 'Thank you! Your address has been saved. The Chadmin will fulfill your tip shortly. Keep up the good work - PU TO THE MOON');
                     
                     // --- ADMIN NOTIFICATION ---
                     const adminNotificationMessage = `
@@ -331,7 +331,7 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
         // Notify the recipient that the tip has been fulfilled
         let recipientDisplay = tip.recipient_username || `user with ID ${tip.recipient_tg_id}`;
         let fulfillmentMessage = `
-            🎉 Your tip for ${formatCurrency(tip.amount, tip.currency)} has been fulfilled! 🎉
+            🎉 Your tip for ${formatCurrency(tip.amount, tip.currency)} has been sent! Thank you for contributing to (TCCP) Taraxa Chad Culture Production! 🗿🟢
             Recipient: ${recipientDisplay}
         `;
         if (txHash) {
