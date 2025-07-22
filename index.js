@@ -1,5 +1,5 @@
 const TelegramBot = require('node-telegram-bot-api');
-const { createClient } = require('@supabase/supabase-js'); // Corrected import path for Supabase
+const { createClient } = require('@supabase/supabase-js');
 
 // --- Configuration from Environment Variables ---
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -48,7 +48,7 @@ Commands:
     bot.sendMessage(chatId, helpText);
 });
 
-// /tip command (Admin Only) - Make sure to include group_chat_id in insert!
+// /tip command (Admin Only) - group_chat_id is NOT stored in DB in this version
 bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) => {
     const chatId = msg.chat.id;
     const adminId = msg.from.id;
@@ -99,8 +99,8 @@ bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) 
                     recipient_tg_id: recipientTgId,
                     amount: amount,
                     currency: currency,
-                    status: 'awaiting_claim',
-                    group_chat_id: chatId // <--- ADDED THIS LINE FOR GROUP NOTIFICATION
+                    status: 'awaiting_claim'
+                    // group_chat_id is NOT included here, addressing schema error
                 }
             ])
             .select();
@@ -269,7 +269,7 @@ bot.on('message', async (msg) => {
 
                         Tip ID: \`${tipDetails.id}\`
                         Recipient: ${tipDetails.recipient_username || msg.from.username ? `@${msg.from.username}` : userId} (TG ID: ${tipDetails.recipient_tg_id || userId})
-                        Amount: ${formatCurrency(tipDetails.amount, tip.currency)}
+                        Amount: ${formatCurrency(tipDetails.amount, tipDetails.currency)}
                         **Address: \`${potentialAddress}\`**
 
                         Please manually send this tip. Reply to this message with \`/done ${tipDetails.id} <transaction_hash>\` after sending.
@@ -303,9 +303,11 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
 
     try {
         // Fetch tip details to get recipient and currency for group notification
+        // Note: group_chat_id is no longer stored, so direct group notification via this means isn't possible here.
+        // It relies on recipient_tg_id for direct DM or will fall back if no recipient_tg_id
         const { data: tip, error: fetchError } = await supabase
             .from('tips')
-            .select('recipient_username, recipient_tg_id, amount, currency, admin_tg_id, group_chat_id') // <--- Make sure group_chat_id is selected
+            .select('recipient_username, recipient_tg_id, amount, currency, admin_tg_id') // Removed group_chat_id selection
             .eq('id', tipId)
             .single();
 
@@ -326,7 +328,7 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
         bot.sendMessage(chatId, `Tip \`${tipId}\` marked as fulfilled.`);
         console.log(`Tip ${tipId} marked as fulfilled by admin. Tx Hash: ${txHash || 'N/A'}`);
 
-        // Notify the recipient/group that the tip has been fulfilled
+        // Notify the recipient that the tip has been fulfilled
         let recipientDisplay = tip.recipient_username || `user with ID ${tip.recipient_tg_id}`;
         let fulfillmentMessage = `
             🎉 Your tip for ${formatCurrency(tip.amount, tip.currency)} has been fulfilled! 🎉
@@ -342,28 +344,12 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
                 await bot.sendMessage(tip.recipient_tg_id, fulfillmentMessage, { parse_mode: 'Markdown' });
                 console.log(`Notified recipient ${recipientDisplay} directly about fulfillment.`);
             } catch (dmError) {
-                console.warn(`Could not DM recipient ${recipientDisplay} (${tip.recipient_tg_id}) about fulfillment. Error: ${dmError.message}.`);
-                // If DM fails, try group if possible
-                if (tip.group_chat_id) {
-                    try {
-                        await bot.sendMessage(tip.group_chat_id, fulfillmentMessage, { parse_mode: 'Markdown' });
-                        console.log(`Notified group ${tip.group_chat_id} about fulfillment after DM failure.`);
-                    } catch (groupError) {
-                        console.error(`Failed to notify original group ${tip.group_chat_id}:`, groupError.message);
-                    }
-                } else {
-                     console.warn(`No group chat ID to fallback for tip ${tipId}.`);
-                }
-            }
-        } else if (tip.group_chat_id) { // If recipient_tg_id was not captured, but group_chat_id is
-            try {
-                await bot.sendMessage(tip.group_chat_id, fulfillmentMessage, { parse_mode: 'Markdown' });
-                console.log(`Notified original group ${tip.group_chat_id} about fulfillment.`);
-            } catch (groupError) {
-                console.error(`Failed to notify original group ${tip.group_chat_id}:`, groupError.message);
+                console.warn(`Could not DM recipient ${recipientDisplay} (${tip.recipient_tg_id}) about fulfillment. Error: ${dmError.message}. Recipient may need to start a DM with the bot first.`);
+                 bot.sendMessage(chatId, `Failed to DM recipient ${recipientDisplay}. They might need to start a DM with the bot first.`);
             }
         } else {
-            console.warn(`No recipient TG ID or group chat ID for tip ${tipId}. Cannot notify about fulfillment.`);
+            console.warn(`No recipient TG ID for tip ${tipId}. Cannot notify recipient directly about fulfillment.`);
+            bot.sendMessage(chatId, `Tip ${tipId} fulfilled, but cannot directly notify recipient as TG ID was not captured. They can check their wallet.`);
         }
 
     } catch (error) {
@@ -372,7 +358,7 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
     }
 });
 
-// Add this polling_error handler back for polling mode
+// IMPORTANT: Add this polling_error handler back for polling mode
 bot.on('polling_error', (err) => console.error('Polling Error:', err.message));
 
 console.log('Bot is running and listening for commands...');
