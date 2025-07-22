@@ -1,6 +1,5 @@
 const TelegramBot = require('node-telegram-bot-api');
-const { createClient } = require('@supabase/supabase-js');
-const express = require('express'); // Import express
+const { createClient } = require('@supabase/supabase-js'); // Corrected import path for Supabase
 
 // --- Configuration from Environment Variables ---
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -8,60 +7,12 @@ const ADMIN_TELEGRAM_ID = parseInt(process.env.ADMIN_TELEGRAM_ID, 10);
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Vercel provides the PORT environment variable
-const PORT = process.env.PORT || 3000;
-
-// HARDCODED Vercel URL for testing - CHANGE THIS TO YOUR ACTUAL URL
-const VERCEL_URL = 'https://just-the-tip-bot.vercel.app'; // <--- HARDCODED URL HERE!
-
-// --- Initialize Bot, Supabase Client, and Express App ---
-// IMPORTANT: Remove { polling: true }
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN);
+// --- Initialize Bot and Supabase Client ---
+// IMPORTANT: Use { polling: true } for local/VM-like operation
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-const app = express(); // Initialize Express app
-app.use(express.json()); // Middleware to parse JSON request bodies
 
-console.log('Bot starting...');
-
-// --- Webhook Endpoint ---
-// This is the URL path Telegram will send updates to
-const WEBHOOK_PATH = `/webhook/${TELEGRAM_BOT_TOKEN}`; // Use token for unique path
-const WEBHOOK_URL = `${VERCEL_URL}${WEBHOOK_PATH}`; // This now uses the hardcoded URL
-
-// Set the webhook with Telegram
-// This function needs to run only once after deployment or if the URL changes
-async function setWebhook() {
-    try {
-        // Ensure bot token is available before setting webhook
-        if (!TELEGRAM_BOT_TOKEN) {
-            console.error('TELEGRAM_BOT_TOKEN is not defined. Cannot set webhook.');
-            return;
-        }
-        await bot.setWebHook(WEBHOOK_URL);
-        console.log(`Webhook set to: ${WEBHOOK_URL}`);
-    } catch (error) {
-        console.error('Error setting webhook:', error.message);
-    }
-}
-
-// Listen for incoming updates from Telegram
-app.post(WEBHOOK_PATH, (req, res) => {
-    bot.processUpdate(req.body); // Process the update
-    res.sendStatus(200); // Respond quickly to Telegram
-});
-
-// Basic endpoint to confirm the server is running (optional)
-app.get('/', (req, res) => {
-    res.send('Telegram bot is running.');
-});
-
-// Start the Express server
-app.listen(PORT, async () => {
-    console.log(`Express server listening on port ${PORT}`);
-    // Always attempt to set webhook since VERCEL_URL is now hardcoded
-    await setWebhook(); // <--- UPDATED TO ALWAYS CALL setWebhook
-});
-
+console.log('Bot starting in polling mode...');
 
 // --- Helper function for currency display ---
 function formatCurrency(amount, currency) {
@@ -421,11 +372,7 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
     }
 });
 
-
-// Log any errors from the polling process
-// This particular error handler might become less relevant for webhook setup
-// as errors would be more about HTTP request handling rather than polling failures.
-// bot.on('polling_error', (err) => console.error('Polling Error (should not occur with webhooks):', err.message));
-// ^-- REMOVED or commented out, as it's not relevant for webhook setup and can sometimes cause confusion.
+// Add this polling_error handler back for polling mode
+bot.on('polling_error', (err) => console.error('Polling Error:', err.message));
 
 console.log('Bot is running and listening for commands...');
