@@ -10,9 +10,9 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Vercel provides the PORT environment variable
 const PORT = process.env.PORT || 3000;
-// You'll get this URL from Vercel after your first deployment.
-// It will look something like https://your-project-name.vercel.app
-const VERCEL_URL = process.env.VERCEL_URL; // Vercel automatically sets this
+
+// HARDCODED Vercel URL for testing - CHANGE THIS TO YOUR ACTUAL URL
+const VERCEL_URL = 'https://just-the-tip-bot.vercel.app'; // <--- HARDCODED URL HERE!
 
 // --- Initialize Bot, Supabase Client, and Express App ---
 // IMPORTANT: Remove { polling: true }
@@ -26,18 +26,21 @@ console.log('Bot starting...');
 // --- Webhook Endpoint ---
 // This is the URL path Telegram will send updates to
 const WEBHOOK_PATH = `/webhook/${TELEGRAM_BOT_TOKEN}`; // Use token for unique path
-const WEBHOOK_URL = `${VERCEL_URL}${WEBHOOK_PATH}`;
+const WEBHOOK_URL = `${VERCEL_URL}${WEBHOOK_PATH}`; // This now uses the hardcoded URL
 
 // Set the webhook with Telegram
 // This function needs to run only once after deployment or if the URL changes
 async function setWebhook() {
     try {
+        // Ensure bot token is available before setting webhook
+        if (!TELEGRAM_BOT_TOKEN) {
+            console.error('TELEGRAM_BOT_TOKEN is not defined. Cannot set webhook.');
+            return;
+        }
         await bot.setWebHook(WEBHOOK_URL);
         console.log(`Webhook set to: ${WEBHOOK_URL}`);
     } catch (error) {
         console.error('Error setting webhook:', error.message);
-        // Exit process or handle error if webhook can't be set
-        // For Vercel, this is usually handled correctly during deployment startup
     }
 }
 
@@ -55,15 +58,12 @@ app.get('/', (req, res) => {
 // Start the Express server
 app.listen(PORT, async () => {
     console.log(`Express server listening on port ${PORT}`);
-    if (VERCEL_URL) { // Only set webhook if Vercel URL is available (i.e., not local dev)
-        await setWebhook();
-    } else {
-        console.warn('VERCEL_URL not found, webhook will not be set. Running in local development mode.');
-    }
+    // Always attempt to set webhook since VERCEL_URL is now hardcoded
+    await setWebhook(); // <--- UPDATED TO ALWAYS CALL setWebhook
 });
 
 
-// --- Helper function for currency display (UNCHANGED) ---
+// --- Helper function for currency display ---
 function formatCurrency(amount, currency) {
     const safeCurrency = (currency && typeof currency === 'string' && currency.trim() !== '') ? currency.toLowerCase() : 'unknown';
     const symbol = safeCurrency === 'tara' ? '🟢' : '🗿🟢';
@@ -71,7 +71,7 @@ function formatCurrency(amount, currency) {
     return `${amount} ${displayCurrency} ${symbol}`;
 }
 
-// --- Bot Commands (UNCHANGED from previous version, copy all the handlers) ---
+// --- Bot Commands ---
 
 // /start command
 bot.onText(/\/start/, (msg) => {
@@ -318,7 +318,7 @@ bot.on('message', async (msg) => {
 
                         Tip ID: \`${tipDetails.id}\`
                         Recipient: ${tipDetails.recipient_username || msg.from.username ? `@${msg.from.username}` : userId} (TG ID: ${tipDetails.recipient_tg_id || userId})
-                        Amount: ${formatCurrency(tipDetails.amount, tipDetails.currency)}
+                        Amount: ${formatCurrency(tipDetails.amount, tip.currency)}
                         **Address: \`${potentialAddress}\`**
 
                         Please manually send this tip. Reply to this message with \`/done ${tipDetails.id} <transaction_hash>\` after sending.
@@ -425,6 +425,7 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
 // Log any errors from the polling process
 // This particular error handler might become less relevant for webhook setup
 // as errors would be more about HTTP request handling rather than polling failures.
-bot.on('polling_error', (err) => console.error('Polling Error (should not occur with webhooks):', err.message));
+// bot.on('polling_error', (err) => console.error('Polling Error (should not occur with webhooks):', err.message));
+// ^-- REMOVED or commented out, as it's not relevant for webhook setup and can sometimes cause confusion.
 
 console.log('Bot is running and listening for commands...');
