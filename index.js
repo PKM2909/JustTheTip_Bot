@@ -1,6 +1,8 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
+const express = require('express'); // Added for web server
+
 
 // --- Configuration from Environment Variables ---
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -23,10 +25,11 @@ console.log('Bot starting in polling mode...');
 
 // --- Helper function for currency display ---
 function formatCurrency(amount, currency) {
-    const safeCurrency = (currency && typeof currency === 'string' && currency.trim() !== '') ? currency.toLowerCase() : 'unknown';
+    const safeCurrency = (currency && typeof currency === 'string' && currency.trim() !== '') ?
+        currency.toLowerCase() : 'unknown';
     const symbol = safeCurrency === 'tara' ? '🟢' : '🗿🟢';
     const displayCurrency = (currency && typeof currency === 'string' && currency.trim() !== '') ? currency.toUpperCase() : 'UNKNOWN';
-    return `${amount.toLocaleString()} ${displayCurrency} ${symbol}`; // Use toLocaleString for amount here too
+    return `${amount.toLocaleString()} ${displayCurrency} ${symbol}`;
 }
 
 // --- Helper function to escape MarkdownV2 special characters ---
@@ -46,33 +49,36 @@ function formatChdpuForGroupNotification(amountChdpu, username, isBurn) {
     const CHDPU_TO_PU_RATIO = 1_000_000; // 1 CHDPU = 1,000,000 Pu
 
     const escapedUsername = escapeMarkdown(username.replace('@', ''));
-
     if (isBurn) {
         return `@${escapedUsername} burned their tip ✅🔥`;
     }
 
     const options = [
-        { unit: 'CHDPU', ratio: 1, symbol: '' }, // Removed 🗿🟢
-        { unit: 'Steven', ratio: CHDPU_TO_STEVEN_RATIO, symbol: '', explainer: '1 Steven = 0.01 CHDPU' }, // Removed 🗿🟢
-        { unit: 'Pu', ratio: CHDPU_TO_PU_RATIO, symbol: '', explainer: '1 Pu = 0.000001 CHDPU' } // Removed 🗿🟢
+        { unit: 'CHDPU', ratio: 1, symbol: '' },
+        { unit: 'Steven', ratio: CHDPU_TO_STEVEN_RATIO, symbol: '', explainer: '1 Steven = 0.01 CHDPU' },
+        { unit: 'Pu', ratio: CHDPU_TO_PU_RATIO, symbol: '', explainer: '1 Pu = 0.000001 CHDPU' }
     ];
-
     // Randomly select one of the options
     const selectedOption = options[Math.floor(Math.random() * options.length)];
-
     const convertedAmount = Math.floor(amountChdpu * selectedOption.ratio); // Use Math.floor for integer units
     const formattedAmount = convertedAmount.toLocaleString();
-
-    // Changed to include ✅ explicitly, removed selectedOption.symbol
     let message = `@${escapedUsername} has been tipped ${formattedAmount} ${selectedOption.unit} ✅`;
-
     if (selectedOption.explainer) {
-        // Add explainer two lines below in italics
         message += `\n\n_(${escapeMarkdown(selectedOption.explainer)})_`;
     }
 
     return message;
 }
+
+// --- Web Server for Replit Uptime (Added as per previous discussion) ---
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => {
+    res.send('Bot is alive and awake!');
+});
+app.listen(PORT, () => {
+    console.log(`Web server listening on port ${PORT}`);
+});
 
 
 // --- Bot Commands ---
@@ -86,7 +92,6 @@ bot.onText(/\/start/, (msg) => {
         bot.sendMessage(chatId, 'Hello! I am your admin-tip bot. Admins can use /tip here. Other users can DM me directly for /claimtip.');
     }
 });
-
 // /help command
 bot.onText(/\/help/, (msg) => {
     const chatId = msg.chat.id;
@@ -107,7 +112,6 @@ Commands:
     `;
     bot.sendMessage(chatId, helpText);
 });
-
 // --- /pudemon command (Public Use) - sends an image ---
 bot.onText(/\/pudemon/i, (msg) => {
     const chatId = msg.chat.id;
@@ -117,7 +121,6 @@ bot.onText(/\/pudemon/i, (msg) => {
         .then(() => console.log(`Sent CHDPU denominations image to chat ${chatId}`))
         .catch(error => console.error(`Error sending photo to chat ${chatId}:`, error.message));
 });
-
 // --- /tip command (Admin Only) - handles @username <amount> <currency> ---
 // This handler should come BEFORE the more general /tip handler
 bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) => {
@@ -177,13 +180,6 @@ bot.onText(/\/tip\s+@(\w+)\s+(\d+(\.\d+)?)\s+(chdpu|tara)/i, async (msg, match) 
         const newTip = data[0];
         console.log('New tip created:', newTip);
 
-        // --- Removed redundant first message, keeping only the detailed one ---
-        // await bot.sendMessage(
-        //     chatId, // Use the current chatId where the command was issued
-        //     `${actualRecipientUsername} has been tipped ${formatCurrency(amount, currency)}! DM the bot to claim it.`
-        // );
-        // console.log(`Group notified about new tip for ${actualRecipientUsername}.`);
-
 
     } catch (error) {
         console.error('Error storing tip in Supabase:', error.message);
@@ -207,7 +203,6 @@ Taraxa Chad Culture Production
         bot.sendMessage(chatId, `Failed to announce tip for ${actualRecipientUsername} in this chat.`);
     }
 });
-
 // --- /tip command (Admin Only, as a reply OR general usage message) ---
 // This handler should come AFTER the more specific /tip handler
 bot.onText(/\/tip/i, async (msg) => {
@@ -257,15 +252,6 @@ bot.onText(/\/tip/i, async (msg) => {
             if (!data || data.length === 0) throw new Error('No data returned after insert.');
             const newTip = data[0];
             console.log('New reply-based tip created:', newTip);
-
-            // --- Removed redundant first message, keeping only the detailed one ---
-            // await bot.sendMessage(
-            //     chatId, // Use the current chatId where the command was issued
-            //     `${recipientUsername || recipientNameDisplay} has been tipped ${formatCurrency(amount, currency)}! DM the bot to claim it.`
-            // );
-            // console.log(`Group notified about new reply-tip for ${recipientUsername || recipientNameDisplay}.`);
-
-
         } catch (error) {
             console.error('Error storing reply-based tip in Supabase:', error.message);
             bot.sendMessage(chatId, 'Failed to save reply-based tip data to database. Please try again.');
@@ -331,18 +317,14 @@ bot.onText(/\/outstandingtips/i, async (msg) => {
         pendingTips.forEach(tip => {
             response += `@${escapeMarkdown(tip.recipient_username.replace('@', ''))} - ${formatCurrency(tip.amount, tip.currency)}\n`;
         });
-
         response += `\nPlease DM the bot to claim or burn your tips.`;
 
         await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
-
     } catch (error) {
         console.error('Error fetching outstanding tips:', error.message);
         bot.sendMessage(chatId, 'An error occurred while fetching outstanding tips. Please try again.');
     }
 });
-
-
 // --- /pendingclaims command (User in DM) ---
 bot.onText(/\/pendingclaims/i, async (msg) => {
     const userId = msg.from.id;
@@ -407,7 +389,6 @@ https://x.com/ChadPuOfficial `);
         bot.sendMessage(chatId, 'An error occurred while checking your pending tips. Please try again later.');
     }
 });
-
 // --- /claimall command (User in DM) ---
 bot.onText(/\/claimall/i, async (msg) => {
     const userId = msg.from.id;
@@ -510,7 +491,6 @@ bot.onText(/\/claimall/i, async (msg) => {
         bot.sendMessage(chatId, 'An error occurred while processing your batch claim. Please try again later.');
     }
 });
-
 // /claimtip Command Handler (User DM Side)
 bot.onText(/\/claimtip/i, async (msg) => {
     const userId = msg.from.id;
@@ -582,9 +562,9 @@ https://x.com/ChadPuOfficial `);
             );
         if (stateError) throw stateError;
         console.log(`User state set for ${userId} to awaiting_address_for_tip for tip ${tipToClaim.id}`);
-
         // --- NEW: Update prompt for /claimtip to include /burn and /same as last time ---
-        let replyMessage = `Hey chad, you're claiming ${formatCurrency(tipToClaim.amount, tipToClaim.currency)}. \n\n`;
+        let replyMessage = `Hey chad, you're claiming ${formatCurrency(tipToClaim.amount, tipToClaim.currency)}.
+\n\n`;
         replyMessage += `Please reply to this message with:\n`;
         replyMessage += `  - A valid Taraxa EVM address (starting with \`0x...\`)\n`;
         replyMessage += `  - Or send \`/burn\` to burn your total tip\n`;
@@ -603,14 +583,298 @@ https://x.com/ChadPuOfficial `);
 });
 
 
+// --- NEW: /burn command handler (user-facing in DM) ---
+bot.onText(/\/burn/i, async (msg) => {
+    const userId = msg.from.id;
+    const chatId = msg.chat.id;
+
+    if (msg.chat.type !== 'private') {
+        bot.sendMessage(chatId, 'Please use the /burn command in a private chat with me to burn your tips.');
+        return;
+    }
+
+    try {
+        const { data: userState, error } = await supabase
+            .from('user_states')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 means "no rows found", which is expected if no state
+            throw error;
+        }
+
+        if (userState && (userState.state === 'awaiting_address_for_tip' || userState.state === 'awaiting_batch_address')) {
+            const potentialAddress = CHDPU_BURN_ADDRESS; // Set address to burn address
+            await bot.sendMessage(chatId, 'You chose to burn your tip(s). Processing your request...');
+
+            if (userState.state === 'awaiting_address_for_tip') {
+                // --- Handle single tip burn ---
+                const tipId = userState.context_id;
+                const { data: tipDetails, error: fetchTipError } = await supabase
+                    .from('tips')
+                    .select('id, recipient_username, recipient_tg_id, amount, currency, admin_tg_id')
+                    .eq('id', tipId)
+                    .single();
+
+                if (fetchTipError) throw fetchTipError;
+                if (!tipDetails) throw new Error('Tip details not found for context_id');
+
+                const { error: tipUpdateError } = await supabase
+                    .from('tips')
+                    .update({
+                        recipient_address: potentialAddress,
+                        status: 'ready_for_admin_fulfillment' // Use same status as fulfillment to trigger admin notification
+                    })
+                    .eq('id', tipId);
+                if (tipUpdateError) throw tipUpdateError;
+
+                const { error: stateClearError } = await supabase
+                    .from('user_states')
+                    .delete()
+                    .eq('user_id', userId);
+                if (stateClearError) throw stateClearError;
+
+                console.log(`Tip ${tipId} marked for burn by user ${userId}.`);
+                await bot.sendMessage(chatId, `Your tip of ${formatCurrency(tipDetails.amount, tipDetails.currency)} has been marked for burning. The Chadmin will confirm shortly.`);
+
+                // Admin notification for single tip burn
+                const adminNotificationMessage = `
+💰 **TIP MARKED FOR BURN!** 💰
+
+Tip ID: \`${tipDetails.id}\`
+Recipient: ${tipDetails.recipient_username || msg.from.username ? `@${escapeMarkdown(msg.from.username)}` : `TG ID: ${escapeMarkdown(String(userId))}`} (TG ID: ${escapeMarkdown(String(userId))})
+Amount: ${formatCurrency(tipDetails.amount, tipDetails.currency)}
+**Address: \`${potentialAddress}\`** (Burn Address)
+
+Please mark this tip as fulfilled (no actual transfer needed)
+Reply to this message with \`/done ${tipDetails.id}\`
+`;
+                await bot.sendMessage(ADMIN_TELEGRAM_ID, adminNotificationMessage, { parse_mode: 'Markdown' });
+
+            } else if (userState.state === 'awaiting_batch_address') {
+                // --- Handle batch tip burn ---
+                const batchId = userState.context_id;
+                const { data: batchDetails, error: fetchBatchError } = await supabase
+                    .from('batch_claims')
+                    .select('id, username, total_amount, currency')
+                    .eq('id', batchId)
+                    .single();
+
+                if (fetchBatchError) throw fetchBatchError;
+                if (!batchDetails) throw new Error('Batch details not found for context_id');
+
+                const { data: batchUpdateData, error: batchUpdateError } = await supabase
+                    .from('batch_claims')
+                    .update({
+                        recipient_address: potentialAddress,
+                        status: 'ready_for_admin_fulfillment'
+                    })
+                    .eq('id', batchId)
+                    .select()
+                    .single();
+                if (batchUpdateError) throw batchUpdateError;
+
+                const { error: stateClearError } = await supabase
+                    .from('user_states')
+                    .delete()
+                    .eq('user_id', userId);
+                if (stateClearError) throw stateClearError;
+
+                const { error: individualTipsUpdateError } = await supabase
+                    .from('tips')
+                    .update({ status: 'ready_for_admin_fulfillment_batch' })
+                    .eq('batch_claim_id', batchId);
+                if (individualTipsUpdateError) throw individualTipsUpdateError;
+
+                console.log(`Batch ${batchId} marked for burn by user ${userId}.`);
+                await bot.sendMessage(chatId, `Your batch claim of ${formatCurrency(batchDetails.total_amount, batchDetails.currency)} has been marked for burning. The Chadmin will confirm shortly.`);
+
+                // Admin notification for batch tip burn
+                const adminNotificationMessage = `
+💰 **BATCH CLAIM MARKED FOR BURN!** 💰
+
+Batch ID: \`${batchDetails.id}\`
+Recipient: ${batchDetails.username || msg.from.username ? `@${escapeMarkdown(msg.from.username)}` : `TG ID: ${escapeMarkdown(String(userId))}`} (TG ID: ${escapeMarkdown(String(userId))})
+Total Amount: ${formatCurrency(batchDetails.total_amount, batchDetails.currency)}
+**Address: \`${potentialAddress}\`** (Burn Address)
+
+Please mark this batch as fulfilled (no actual transfer needed)
+Reply to this message with \`/donebatch ${batchDetails.id}\`
+`;
+                await bot.sendMessage(ADMIN_TELEGRAM_ID, adminNotificationMessage, { parse_mode: 'Markdown' });
+            }
+        } else {
+            bot.sendMessage(chatId, 'The /burn command is only valid when you are in the process of claiming a tip. Please use /claimtip or /claimall first.');
+        }
+    } catch (err) {
+        console.error('Error handling /burn command:', err.message);
+        bot.sendMessage(chatId, 'An error occurred while processing your burn request. Please try again.');
+    }
+});
+
+
+// --- NEW: /same as last time command handler (user-facing in DM) ---
+bot.onText(/\/same as last time/i, async (msg) => {
+    const userId = msg.from.id;
+    const chatId = msg.chat.id;
+
+    if (msg.chat.type !== 'private') {
+        bot.sendMessage(chatId, 'Please use the /same as last time command in a private chat with me.');
+        return;
+    }
+
+    try {
+        const { data: userState, error } = await supabase
+            .from('user_states')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') {
+            throw error;
+        }
+
+        if (userState && (userState.state === 'awaiting_address_for_tip' || userState.state === 'awaiting_batch_address')) {
+            // Fetch last_claimed_address from active_group_users (or your dedicated user profiles table)
+            const { data: userData, error: userFetchError } = await supabase
+                .from('active_group_users')
+                .select('last_claimed_address')
+                .eq('user_id', userId)
+                .single();
+
+            if (userFetchError && userFetchError.code !== 'PGRST116') throw userFetchError;
+
+            if (userData && userData.last_claimed_address) {
+                const potentialAddress = userData.last_claimed_address;
+                await bot.sendMessage(chatId, `Using your last claimed address: \`${potentialAddress}\``, { parse_mode: 'Markdown' });
+
+                // Now, re-run the address processing logic with this fetched address
+                if (userState.state === 'awaiting_address_for_tip') {
+                    // --- Handle single tip claim ---
+                    const tipId = userState.context_id;
+                    const { data: tipDetails, error: fetchTipError } = await supabase
+                        .from('tips')
+                        .select('id, recipient_username, recipient_tg_id, amount, currency, admin_tg_id')
+                        .eq('id', tipId)
+                        .single();
+
+                    if (fetchTipError) throw fetchTipError;
+                    if (!tipDetails) throw new Error('Tip details not found for context_id');
+
+                    const { error: tipUpdateError } = await supabase
+                        .from('tips')
+                        .update({
+                            recipient_address: potentialAddress,
+                            status: 'ready_for_admin_fulfillment'
+                        })
+                        .eq('id', tipId);
+                    if (tipUpdateError) throw tipUpdateError;
+
+                    const { error: stateClearError } = await supabase
+                        .from('user_states')
+                        .delete()
+                        .eq('user_id', userId);
+                    if (stateClearError) throw stateClearError;
+
+                    console.log(`Address received from ${userId} for tip ${tipId}: ${potentialAddress}.`);
+                    await bot.sendMessage(chatId, `Thank you! Your address has been received. The Chadmin will fulfill your request shortly.
+
+Keep up the good work -
+
+$chdpu to $1, $tara $10`);
+
+                    // Update last_claimed_address (already set here, but good to ensure if logic changes)
+                    await supabase.from('active_group_users')
+                        .upsert({ user_id: userId, last_claimed_address: potentialAddress }, { onConflict: 'user_id', ignoreDuplicates: false })
+                        .then(({ error: upsertError }) => {
+                            if (upsertError) console.error("Error upserting last_claimed_address:", upsertError.message);
+                        });
+
+                    // ADMIN NOTIFICATION for single tip
+                    const adminNotificationMessage = `
+💰 **NEW TIP READY FOR MANUAL FULFILLMENT!** 💰
+
+Tip ID: \`${tipDetails.id}\`
+Recipient: ${tipDetails.recipient_username || msg.from.username ? `@${escapeMarkdown(msg.from.username)}` : `TG ID: ${escapeMarkdown(String(userId))}`} (TG ID: ${escapeMarkdown(String(userId))})
+Amount: ${formatCurrency(tipDetails.amount, tipDetails.currency)}
+**Address: \`${potentialAddress}\`**
+
+Please manually send this tip...
+Reply to this message with \`/done ${tipDetails.id} <transaction_hash>\` after sending. `;
+                    await bot.sendMessage(ADMIN_TELEGRAM_ID, adminNotificationMessage, { parse_mode: 'Markdown' });
+                    console.log(`Admin notified for tip ${tipDetails.id} with all details.`);
+
+                } else if (userState.state === 'awaiting_batch_address') {
+                    // --- Handle batch claim ---
+                    const batchId = userState.context_id;
+                    // Update the batch_claims entry with the address and new status
+                    const { data: batchUpdateData, error: batchUpdateError } = await supabase
+                        .from('batch_claims')
+                        .update({ recipient_address: potentialAddress, status: 'ready_for_admin_fulfillment' })
+                        .eq('id', batchId)
+                        .select()
+                        .single();
+                    if (batchUpdateError) throw batchUpdateError;
+                    if (!batchUpdateData) throw new Error('Failed to update batch claim.');
+
+                    // Clear user state
+                    const { error: stateClearError } = await supabase
+                        .from('user_states')
+                        .delete()
+                        .eq('user_id', userId);
+                    if (stateClearError) throw stateClearError;
+
+                    // Also update the status of individual tips belonging to this batch
+                    const { error: individualTipsUpdateError } = await supabase
+                        .from('tips')
+                        .update({ status: 'ready_for_admin_fulfillment_batch' }) // New status to distinguish
+                        .eq('batch_claim_id', batchId);
+                    if (individualTipsUpdateError) throw individualTipsUpdateError;
+
+                    console.log(`Address received from ${userId} for batch ${batchId}: ${potentialAddress}.`);
+                    await bot.sendMessage(chatId, `Thank you! Your address has been received for your batch claim. The Chadmin will fulfill your request shortly. Keep up the good work - $chdpu to $1, $tara $10`);
+
+                    // Update last_claimed_address (already set here, but good to ensure if logic changes)
+                    await supabase.from('active_group_users')
+                        .upsert({ user_id: userId, last_claimed_address: potentialAddress }, { onConflict: 'user_id', ignoreDuplicates: false })
+                        .then(({ error: upsertError }) => {
+                            if (upsertError) console.error("Error upserting last_claimed_address:", upsertError.message);
+                        });
+
+                    // ADMIN NOTIFICATION for batch claim
+                    const adminNotificationMessage = `
+💰 **NEW BATCH CLAIM READY FOR MANUAL FULFILLMENT!** 💰
+
+Batch ID: \`${batchUpdateData.id}\`
+Recipient: ${batchUpdateData.username || msg.from.username ? `@${escapeMarkdown(msg.from.username)}` : `TG ID: ${escapeMarkdown(String(userId))}`} (TG ID: ${escapeMarkdown(String(userId))})
+Total Amount: ${formatCurrency(batchUpdateData.total_amount, batchUpdateData.currency)}
+**Address: \`${potentialAddress}\`**
+
+Please manually send this *total* tip.
+Reply to this message with \`/donebatch ${batchUpdateData.id} <transaction_hash>\` after sending. `;
+                    await bot.sendMessage(ADMIN_TELEGRAM_ID, adminNotificationMessage, { parse_mode: 'Markdown' });
+                    console.log(`Admin notified for batch claim ${batchUpdateData.id} with all details.`);
+                }
+            } else {
+                await bot.sendMessage(chatId, 'You do not have a previously saved address. Please provide a valid Taraxa EVM address (starting with `0x...`) or send `/burn`.', { parse_mode: 'Markdown' });
+            }
+        } else {
+            bot.sendMessage(chatId, 'The /same as last time command is only valid when you are in the process of claiming a tip. Please use /claimtip or /claimall first.');
+        }
+    } catch (err) {
+        console.error('Error handling /same as last time command:', err.message);
+        bot.sendMessage(chatId, 'An unexpected error occurred while processing your request. Please try again.');
+    }
+});
+
+
 // Handle General Messages (for collecting addresses AND Admin Notification AND Activity Tracking)
 bot.on('message', async (msg) => {
     const userId = msg.from.id;
     const chatId = msg.chat.id;
 
     // --- Activity Tracking for Groups ---
-    // Keep this section as it tracks active users for other potential uses
-    // or for future features you might re-introduce that rely on it.
     if (msg.chat.type === 'group' || msg.chat.type === 'supergroup') {
         const username = msg.from.username;
         const firstName = msg.from.first_name;
@@ -639,7 +903,8 @@ bot.on('message', async (msg) => {
     }
 
     // --- Logic for collecting addresses in private chats ---
-    if (msg.chat.type === 'private' && !msg.text.startsWith('/')) {
+    // This block now ONLY handles actual address input, as /burn and /same as last time are separate command handlers
+    if (msg.chat.type === 'private' && !msg.text.startsWith('/')) { // Still exclude messages starting with '/'
         try {
             const { data: userState, error } = await supabase
                 .from('user_states')
@@ -651,35 +916,11 @@ bot.on('message', async (msg) => {
             }
 
             if (userState) {
-                let potentialAddress = msg.text.trim();
-
-                // --- NEW: Handle /burn and /same as last time ---
-                if (potentialAddress.toLowerCase() === '/burn') {
-                    potentialAddress = CHDPU_BURN_ADDRESS;
-                    await bot.sendMessage(chatId, 'You chose to burn your tip(s). Processing your request...');
-                } else if (potentialAddress.toLowerCase() === '/same as last time') {
-                    // Fetch last_claimed_address from active_group_users (or your dedicated user profiles table)
-                    const { data: userData, error: userFetchError } = await supabase
-                        .from('active_group_users') // Assuming active_group_users is where last_claimed_address is stored
-                        .select('last_claimed_address')
-                        .eq('user_id', userId)
-                        .single();
-
-                    if (userFetchError && userFetchError.code !== 'PGRST116') throw userFetchError;
-
-                    if (userData && userData.last_claimed_address) {
-                        potentialAddress = userData.last_claimed_address;
-                        await bot.sendMessage(chatId, `Using your last claimed address: \`${potentialAddress}\``, {parse_mode: 'Markdown'});
-                    } else {
-                        await bot.sendMessage(chatId, 'You do not have a previously saved address. Please provide a valid Taraxa EVM address (starting with `0x...`) or send `/burn`.', {parse_mode: 'Markdown'});
-                        return; // Stop processing, user needs to input address
-                    }
-                }
+                const potentialAddress = msg.text.trim();
 
                 const isValidAddress = /^0x[a-fA-F0-9]{40}$/.test(potentialAddress);
-
                 if (!isValidAddress) {
-                    await bot.sendMessage(msg.chat.id, 'That doesn\'t look like a valid Taraxa EVM address. Please try again. It should start with `0x` and be 42 characters long.', {parse_mode: 'Markdown'});
+                    await bot.sendMessage(msg.chat.id, 'That doesn\'t look like a valid Taraxa EVM address. Please try again. It should start with `0x` and be 42 characters long.', { parse_mode: 'Markdown' });
                     return; // Stop processing if address is invalid
                 }
 
@@ -694,6 +935,7 @@ bot.on('message', async (msg) => {
 
                     if (fetchTipError) throw fetchTipError;
                     if (!tipDetails) throw new Error('Tip details not found for context_id');
+
                     const { error: tipUpdateError } = await supabase
                         .from('tips')
                         .update({
@@ -715,15 +957,12 @@ bot.on('message', async (msg) => {
 Keep up the good work -
 
 $chdpu to $1, $tara $10`);
-
                     // --- NEW: Update last_claimed_address for user ---
                     await supabase.from('active_group_users')
                         .upsert({ user_id: userId, last_claimed_address: potentialAddress }, { onConflict: 'user_id', ignoreDuplicates: false }) // Use ignoreDuplicates: false to always update
                         .then(({ error: upsertError }) => {
                             if (upsertError) console.error("Error upserting last_claimed_address:", upsertError.message);
                         });
-
-
                     // --- ADMIN NOTIFICATION for single tip ---
                     const adminNotificationMessage = `
 💰 **NEW TIP READY FOR MANUAL FULFILLMENT!** 💰
@@ -733,26 +972,23 @@ Recipient: ${tipDetails.recipient_username || msg.from.username ? `@${escapeMark
 Amount: ${formatCurrency(tipDetails.amount, tipDetails.currency)}
 **Address: \`${potentialAddress}\`**
 
-Please manually send this tip. Reply to this message with \`/done ${tipDetails.id} <transaction_hash>\` after sending.
-                    `;
+Please manually send this tip...
+Reply to this message with \`/done ${tipDetails.id} <transaction_hash>\` after sending. `;
                     await bot.sendMessage(ADMIN_TELEGRAM_ID, adminNotificationMessage, { parse_mode: 'Markdown' });
                     console.log(`Admin notified for tip ${tipDetails.id} with all details.`);
-
                 } else if (userState.state === 'awaiting_batch_address') {
                     // --- Handle batch claim ---
                     const batchId = userState.context_id;
                     // Update the batch_claims entry with the address and new status
                     const { data: batchUpdateData, error: batchUpdateError } = await supabase
                         .from('batch_claims')
-                        .update({
-                            recipient_address: potentialAddress,
-                            status: 'ready_for_admin_fulfillment'
-                        })
+                        .update({ recipient_address: potentialAddress, status: 'ready_for_admin_fulfillment' })
                         .eq('id', batchId)
                         .select()
                         .single();
                     if (batchUpdateError) throw batchUpdateError;
                     if (!batchUpdateData) throw new Error('Failed to update batch claim.');
+
                     // Clear user state
                     const { error: stateClearError } = await supabase
                         .from('user_states')
@@ -768,11 +1004,7 @@ Please manually send this tip. Reply to this message with \`/done ${tipDetails.i
                     if (individualTipsUpdateError) throw individualTipsUpdateError;
 
                     console.log(`Address received from ${userId} for batch ${batchId}: ${potentialAddress}.`);
-                    await bot.sendMessage(msg.chat.id, `Thank you! Your address has been received for your batch claim. The Chadmin will fulfill your request shortly.
-
-Keep up the good work -
-
-$chdpu to $1, $tara $10`);
+                    await bot.sendMessage(msg.chat.id, `Thank you! Your address has been received for your batch claim. The Chadmin will fulfill your request shortly. Keep up the good work - $chdpu to $1, $tara $10`);
 
                     // --- NEW: Update last_claimed_address for user ---
                     await supabase.from('active_group_users')
@@ -780,7 +1012,6 @@ $chdpu to $1, $tara $10`);
                         .then(({ error: upsertError }) => {
                             if (upsertError) console.error("Error upserting last_claimed_address:", upsertError.message);
                         });
-
 
                     // --- ADMIN NOTIFICATION for batch claim ---
                     const adminNotificationMessage = `
@@ -791,11 +1022,10 @@ Recipient: ${batchUpdateData.username || msg.from.username ? `@${escapeMarkdown(
 Total Amount: ${formatCurrency(batchUpdateData.total_amount, batchUpdateData.currency)}
 **Address: \`${potentialAddress}\`**
 
-Please manually send this *total* tip. Reply to this message with \`/donebatch ${batchUpdateData.id} <transaction_hash>\` after sending.
-                    `;
+Please manually send this *total* tip.
+Reply to this message with \`/donebatch ${batchUpdateData.id} <transaction_hash>\` after sending. `;
                     await bot.sendMessage(ADMIN_TELEGRAM_ID, adminNotificationMessage, { parse_mode: 'Markdown' });
                     console.log(`Admin notified for batch claim ${batchUpdateData.id} with all details.`);
-
                 }
             }
         } catch (err) {
@@ -804,20 +1034,16 @@ Please manually send this *total* tip. Reply to this message with \`/donebatch $
         }
     }
 });
-
 // --- /done Command (Admin Only, for confirming individual tip fulfillment) ---
 bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match) => {
     const chatId = msg.chat.id;
     const adminId = msg.from.id;
-
     if (adminId !== ADMIN_TELEGRAM_ID) {
         bot.sendMessage(chatId, 'Sorry, only the admin can use the /done command.');
         return;
     }
-
     const tipId = match[1];
     const txHash = match[2] || null; // Optional transaction hash
-
     try {
         // Fetch tip details
         const { data: tip, error: fetchError } = await supabase
@@ -825,7 +1051,6 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
             .select('recipient_username, recipient_tg_id, amount, currency, recipient_address, status, batch_claim_id')
             .eq('id', tipId)
             .single();
-
         if (fetchError) throw fetchError;
         if (!tip) {
             bot.sendMessage(chatId, `Tip with ID \`${tipId}\` not found.`);
@@ -839,33 +1064,24 @@ bot.onText(/\/done\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match
             bot.sendMessage(chatId, `Tip \`${tipId}\` is already fulfilled.`);
             return;
         }
-
-
         // Update tip status to 'fulfilled'
         const { error: updateError } = await supabase
             .from('tips')
             .update({ status: 'fulfilled', tx_hash: txHash })
             .eq('id', tipId);
         if (updateError) throw updateError;
-
         bot.sendMessage(chatId, `Tip \`${tipId}\` marked as fulfilled.`);
         console.log(`Tip ${tipId} marked as fulfilled by admin. Tx Hash: ${txHash || 'N/A'}`);
-
         // Notify the recipient (generic fulfillment message)
-        let recipientDisplay = tip.recipient_username || (tip.recipient_tg_id ? `user with ID ${escapeMarkdown(String(tip.recipient_tg_id))}` : 'a user');
-        let fulfillmentMessage = `
-🎉 Your tip for ${formatCurrency(tip.amount, tip.currency)} has been sent!
-🎉
-Recipient: ${recipientDisplay}
-        `;
+        let recipientDisplay = tip.recipient_username ||
+            (tip.recipient_tg_id ? `user with ID ${escapeMarkdown(String(tip.recipient_tg_id))}` : 'a user');
+        let fulfillmentMessage = ` 🎉 Your tip for ${formatCurrency(tip.amount, tip.currency)} has been sent! 🎉`;
         if (tip.recipient_address && tip.recipient_address.toLowerCase() === CHDPU_BURN_ADDRESS.toLowerCase()) {
             fulfillmentMessage += `\n(Note: This tip was sent to the burn address \`${CHDPU_BURN_ADDRESS}\` as per your request.)`;
         }
-
         if (txHash) {
             fulfillmentMessage += `\nTransaction: \`${txHash}\``;
         }
-
         // Try to notify the user directly if tg_id is available
         if (tip.recipient_tg_id) {
             try {
@@ -879,108 +1095,92 @@ Recipient: ${recipientDisplay}
             console.warn(`No recipient TG ID for tip ${tipId}. Cannot notify recipient directly about fulfillment.`);
             bot.sendMessage(chatId, `Tip ${tipId} fulfilled, but cannot directly notify recipient as TG ID was not captured. They can check their wallet.`);
         }
-
         // --- NEW: Group Notification on Fulfillment (Individual Tip) ---
         let groupNotificationText;
         const isBurnFulfillment = tip.recipient_address && tip.recipient_address.toLowerCase() === CHDPU_BURN_ADDRESS.toLowerCase();
-
         if (tip.currency.toLowerCase() === 'chdpu') {
             groupNotificationText = formatChdpuForGroupNotification(tip.amount, tip.recipient_username, isBurnFulfillment);
-        } else {
-            // For TARA or other currencies, or if burned, use standard format
+        } else { // For TARA or other currencies, or if burned, use standard format
             if (isBurnFulfillment) {
                 groupNotificationText = `@${escapeMarkdown(tip.recipient_username.replace('@', ''))} burned their tip ✅🔥`;
             } else {
-                groupNotificationText = `@${escapeMarkdown(tip.recipient_username.replace('@', ''))} was tipped ${formatCurrency(tip.amount, tip.currency)} ✅`; // Kept ✅
+                groupNotificationText = `@${escapeMarkdown(tip.recipient_username.replace('@', ''))} has been tipped ${formatCurrency(tip.amount, tip.currency.toUpperCase())} ✅`;
             }
         }
 
-        await bot.sendMessage(GROUP_NOTIFICATION_CHAT_ID, groupNotificationText, { parse_mode: 'Markdown' });
-
-        // --- NEW: Separate /burn message for burn fulfillments ---
-        if (isBurnFulfillment) {
-            await bot.sendMessage(GROUP_NOTIFICATION_CHAT_ID, '/burn');
+        try {
+            await bot.sendMessage(GROUP_NOTIFICATION_CHAT_ID, groupNotificationText, { parse_mode: 'Markdown' });
+            console.log(`Group notified about fulfillment of tip ${tipId}.`);
+        } catch (groupNotifyError) {
+            console.error(`Error sending group notification for tip ${tipId}:`, groupNotifyError.message);
         }
 
-
     } catch (error) {
-        console.error('Error handling /done command:', error.message);
-        bot.sendMessage(chatId, `Failed to mark tip as fulfilled: ${error.message}`);
+        console.error('Error confirming tip fulfillment:', error.message);
+        bot.sendMessage(chatId, 'An error occurred while trying to mark the tip as fulfilled. Please try again.');
     }
 });
-
-
-// --- /donebatch Command (Admin Only, for confirming batch fulfillment) ---
+// --- /donebatch Command (Admin Only, for confirming batch claim fulfillment) ---
 bot.onText(/\/donebatch\s+([0-9a-fA-F-]+)\s*(0x[a-fA-F0-9]{64})?/i, async (msg, match) => {
     const chatId = msg.chat.id;
     const adminId = msg.from.id;
-
     if (adminId !== ADMIN_TELEGRAM_ID) {
         bot.sendMessage(chatId, 'Sorry, only the admin can use the /donebatch command.');
         return;
     }
-
     const batchId = match[1];
     const txHash = match[2] || null; // Optional transaction hash
-
     try {
         // Fetch batch details
-        const { data: batchClaim, error: fetchError } = await supabase
+        const { data: batch, error: fetchError } = await supabase
             .from('batch_claims')
-            .select('id, user_id, username, first_name, total_amount, currency, recipient_address, status')
+            .select('id, username, user_id, total_amount, currency, recipient_address, status')
             .eq('id', batchId)
             .single();
-
         if (fetchError) throw fetchError;
-        if (!batchClaim) {
-            bot.sendMessage(chatId, `Batch claim with ID \`${batchId}\` not found.`);
+        if (!batch) {
+            bot.sendMessage(chatId, `Batch with ID \`${batchId}\` not found.`);
             return;
         }
-        if (batchClaim.status === 'fulfilled') {
-            bot.sendMessage(chatId, `Batch claim \`${batchId}\` is already fulfilled.`);
+        if (batch.status === 'fulfilled') {
+            bot.sendMessage(chatId, `Batch \`${batchId}\` is already fulfilled.`);
             return;
         }
-
-        // Update batch claim status to 'fulfilled'
-        const { error: updateBatchError } = await supabase
+        // Update batch status to 'fulfilled'
+        const { error: updateError } = await supabase
             .from('batch_claims')
-            .update({ status: 'fulfilled', tx_hash: txHash, fulfilled_at: new Date().toISOString() })
+            .update({ status: 'fulfilled', tx_hash: txHash })
             .eq('id', batchId);
-        if (updateBatchError) throw updateBatchError;
+        if (updateError) throw updateError;
 
-        // Also update all individual tips associated with this batch
-        const { data: individualTips, error: updateTipsError } = await supabase
+        // Also update all individual tips that are part of this batch
+        const { error: updateTipsError } = await supabase
             .from('tips')
             .update({ status: 'fulfilled', tx_hash: txHash })
-            .eq('batch_claim_id', batchId)
-            .select('id, amount, currency');
+            .eq('batch_claim_id', batchId);
         if (updateTipsError) throw updateTipsError;
 
-        bot.sendMessage(chatId, `Batch claim \`${batchId}\` and all ${individualTips.length} associated tips marked as fulfilled.`);
-        console.log(`Batch claim ${batchId} marked as fulfilled by admin. Tx Hash: ${txHash || 'N/A'}`);
+        bot.sendMessage(chatId, `Batch \`${batchId}\` and all associated tips marked as fulfilled.`);
+        console.log(`Batch ${batchId} marked as fulfilled by admin. Tx Hash: ${txHash || 'N/A'}`);
 
-        // Notify the recipient
-        let recipientDisplay = batchClaim.username || batchClaim.first_name ? escapeMarkdown(batchClaim.first_name) : `user with ID ${escapeMarkdown(String(batchClaim.user_id))}`;
-        let fulfillmentMessage = `
-🎉 Your total tip for ${formatCurrency(batchClaim.total_amount, batchClaim.currency)} from your batch claim has been sent!
-🎉
-Recipient: ${recipientDisplay}
-`;
-        if (batchClaim.recipient_address && batchClaim.recipient_address.toLowerCase() === CHDPU_BURN_ADDRESS.toLowerCase()) {
-            fulfillmentMessage += `\n(Note: This tip was sent to the burn address \`${CHDPU_BURN_ADDRESS}\` as per your request.)`;
+        // Notify the recipient (generic fulfillment message for batch)
+        let recipientDisplay = batch.username ||
+            (batch.user_id ? `user with ID ${escapeMarkdown(String(batch.user_id))}` : 'a user');
+        let fulfillmentMessage = ` 🎉 Your batch claim for ${formatCurrency(batch.total_amount, batch.currency)} has been sent! 🎉`;
+        if (batch.recipient_address && batch.recipient_address.toLowerCase() === CHDPU_BURN_ADDRESS.toLowerCase()) {
+            fulfillmentMessage += `\n(Note: This batch was sent to the burn address \`${CHDPU_BURN_ADDRESS}\` as per your request.)`;
         }
         if (txHash) {
             fulfillmentMessage += `\nTransaction: \`${txHash}\``;
         }
-        fulfillmentMessage += `\nThis fulfilled ${individualTips.length} individual tips for you.`;
-        // Try to notify the user directly
-        if (batchClaim.user_id) {
+
+        if (batch.user_id) {
             try {
-                await bot.sendMessage(batchClaim.user_id, fulfillmentMessage, { parse_mode: 'Markdown' });
-                console.log(`Notified recipient ${recipientDisplay} directly about batch fulfillment.`);
+                await bot.sendMessage(batch.user_id, fulfillmentMessage, { parse_mode: 'Markdown' });
+                console.log(`Notified batch recipient ${recipientDisplay} directly about fulfillment.`);
             } catch (dmError) {
-                console.warn(`Could not DM recipient ${recipientDisplay} (${batchClaim.user_id}) about batch fulfillment. Error: ${dmError.message}. Recipient may need to start a DM with the bot first.`);
-                bot.sendMessage(chatId, `Failed to DM recipient ${recipientDisplay}. They might need to start a DM with the bot first.`);
+                console.warn(`Could not DM batch recipient ${recipientDisplay} (${batch.user_id}) about fulfillment. Error: ${dmError.message}. Recipient may need to start a DM with the bot first.`);
+                bot.sendMessage(chatId, `Failed to DM batch recipient ${recipientDisplay}. They might need to start a DM with the bot first.`);
             }
         } else {
             console.warn(`No recipient TG ID for batch ${batchId}. Cannot notify recipient directly about fulfillment.`);
@@ -989,124 +1189,37 @@ Recipient: ${recipientDisplay}
 
         // --- NEW: Group Notification on Fulfillment (Batch Claim) ---
         let groupNotificationText;
-        const isBurnFulfillment = batchClaim.recipient_address && batchClaim.recipient_address.toLowerCase() === CHDPU_BURN_ADDRESS.toLowerCase();
-
-        if (batchClaim.currency.toLowerCase() === 'chdpu') {
-            groupNotificationText = formatChdpuForGroupNotification(batchClaim.total_amount, batchClaim.username, isBurnFulfillment);
-        } else {
-            // For TARA or other currencies, or if burned, use standard format
+        const isBurnFulfillment = batch.recipient_address && batch.recipient_address.toLowerCase() === CHDPU_BURN_ADDRESS.toLowerCase();
+        if (batch.currency.toLowerCase() === 'chdpu') {
+            groupNotificationText = formatChdpuForGroupNotification(batch.total_amount, batch.username, isBurnFulfillment);
+        } else { // For TARA or other currencies, or if burned, use standard format
             if (isBurnFulfillment) {
-                groupNotificationText = `@${escapeMarkdown(batchClaim.username.replace('@', ''))} burned their tip ✅🔥`;
+                groupNotificationText = `@${escapeMarkdown(batch.username.replace('@', ''))} burned their batch claim ✅🔥`;
             } else {
-                groupNotificationText = `@${escapeMarkdown(batchClaim.username.replace('@', ''))} was tipped ${formatCurrency(batchClaim.total_amount, batchClaim.currency)} ✅`; // Kept ✅
+                groupNotificationText = `@${escapeMarkdown(batch.username.replace('@', ''))} has claimed ${formatCurrency(batch.total_amount, batch.currency.toUpperCase())} ✅`;
             }
         }
-
-        await bot.sendMessage(GROUP_NOTIFICATION_CHAT_ID, groupNotificationText, { parse_mode: 'Markdown' });
-
-        // --- NEW: Separate /burn message for burn fulfillments ---
-        if (isBurnFulfillment) {
-            await bot.sendMessage(GROUP_NOTIFICATION_CHAT_ID, '/burn');
+        try {
+            await bot.sendMessage(GROUP_NOTIFICATION_CHAT_ID, groupNotificationText, { parse_mode: 'Markdown' });
+            console.log(`Group notified about fulfillment of batch ${batchId}.`);
+        } catch (groupNotifyError) {
+            console.error(`Error sending group notification for batch ${batchId}:`, groupNotifyError.message);
         }
 
-
     } catch (error) {
-        console.error('Error handling /donebatch command:', error.message);
-        bot.sendMessage(chatId, `Failed to mark batch as fulfilled: ${error.message}`);
+        console.error('Error confirming batch claim fulfillment:', error.message);
+        bot.sendMessage(chatId, 'An error occurred while trying to mark the batch claim as fulfilled. Please try again.');
     }
 });
 
-
-// --- /stats command (Admin Only, in DM) ---
-bot.onText(/\/stats/i, async (msg) => {
-    const chatId = msg.chat.id;
-    const adminId = msg.from.id;
-
-    // 1. Admin verification
-    if (adminId !== ADMIN_TELEGRAM_ID) {
-        bot.sendMessage(chatId, 'Sorry, only the admin can use the /stats command.');
-        return;
-    }
-
-    // Ensure it's used in a private chat for security/privacy
-    if (msg.chat.type !== 'private') {
-        bot.sendMessage(chatId, 'Please use the /stats command in a private chat with me.');
-        return;
-    }
-
-    try {
-        // Count fulfilled individual tips
-        const { count: fulfilledTipsCount, error: tipsError } = await supabase
-            .from('tips')
-            .select('id', { count: 'exact' })
-            .eq('status', 'fulfilled')
-            .is('batch_claim_id', null); // Count only individual fulfilled tips not part of a batch
-
-        if (tipsError) throw tipsError;
-
-        // Sum amounts of fulfilled individual tips
-        const { data: fulfilledTipsAmounts, error: tipsAmountsError } = await supabase
-            .from('tips')
-            .select('amount, currency')
-            .eq('status', 'fulfilled')
-            .is('batch_claim_id', null);
-        if (tipsAmountsError) throw tipsAmountsError;
-
-        let totalTipsAmountCHDPU = 0;
-        let totalTipsAmountTARA = 0;
-        fulfilledTipsAmounts.forEach(tip => {
-            if (tip.currency.toLowerCase() === 'chdpu') {
-                totalTipsAmountCHDPU += tip.amount;
-            } else if (tip.currency.toLowerCase() === 'tara') {
-                totalTipsAmountTARA += tip.amount;
-            }
-        });
-        // Count fulfilled batch claims
-        const { count: fulfilledBatchesCount, error: batchesError } = await supabase
-            .from('batch_claims')
-            .select('id', { count: 'exact' })
-            .eq('status', 'fulfilled');
-        if (batchesError) throw batchesError;
-
-        // Sum amounts of fulfilled batch claims
-        const { data: fulfilledBatchesAmounts, error: batchesAmountsError } = await supabase
-            .from('batch_claims')
-            .select('total_amount, currency')
-            .eq('status', 'fulfilled');
-        if (batchesAmountsError) throw batchesAmountsError;
-
-        let totalBatchesAmountCHDPU = 0;
-        let totalBatchesAmountTARA = 0;
-        fulfilledBatchesAmounts.forEach(batch => {
-            if (batch.currency.toLowerCase() === 'chdpu') {
-                totalBatchesAmountCHDPU += batch.total_amount;
-            } else if (batch.currency.toLowerCase() === 'tara') {
-                totalBatchesAmountTARA += batch.total_amount;
-            }
-        });
-        // Combine totals
-        const grandTotalTips = fulfilledTipsCount + fulfilledBatchesCount;
-        // Counting individual fulfilled tips + fulfilled batch claims as single 'transactions'
-        const grandTotalAmountCHDPU = totalTipsAmountCHDPU + totalBatchesAmountCHDPU;
-        const grandTotalAmountTARA = totalBatchesAmountTARA; // Corrected to just use batch sum for TARA as individual tips are separate
-
-        let statsMessage = `📊 **Bot Fulfillment Stats** 📊\n\n`;
-        statsMessage += `Total fulfilled transactions (individual tips + batch claims): *${grandTotalTips}*\n\n`;
-        if (grandTotalAmountCHDPU > 0) {
-            statsMessage += `Total CHDPU sent: *${formatCurrency(grandTotalAmountCHDPU, 'CHDPU')}*\n`;
-        }
-        if (grandTotalAmountTARA > 0) {
-            statsMessage += `Total TARA sent: *${formatCurrency(grandTotalAmountTARA, 'TARA')}*\n`;
-        }
-        statsMessage += `\n(Counts are for fully 'fulfilled' tips and batches.)`;
-        await bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
-
-    } catch (error) {
-        console.error('Error fetching stats:', error.message);
-        bot.sendMessage(chatId, 'An error occurred while fetching stats. Please try again.');
-    }
-});
 
 // IMPORTANT: Add this polling_error handler back for polling mode
-bot.on('polling_error', (err) => console.error('Polling Error:', err.message));
-console.log('Bot is running and listening for commands...');
+bot.on('polling_error', (error) => {
+    console.error(`Polling error: ${error.code} - ${error.message}`);
+    // You might want to add more robust error handling here,
+    // such as restarting the bot, or notifying the admin.
+});
+
+// Enable graceful stop
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
